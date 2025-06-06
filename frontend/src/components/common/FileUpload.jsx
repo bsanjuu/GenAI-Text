@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import Button from './Button';
+import './FileUpload.css';
 
 /**
  * File upload component with drag and drop functionality
@@ -156,6 +157,11 @@ const FileUpload = ({
           </p>
         </div>
       </div>
+
+      <label className="file-upload-label mt-2">
+        <span className="upload-file-icon"></span>
+        {label}
+      </label>
 
       {error && (
         <p className="mt-2 text-sm text-red-600">{error}</p>
