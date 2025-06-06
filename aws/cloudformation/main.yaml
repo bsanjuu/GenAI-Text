@@ -1,0 +1,63 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Main template for Text Summarization Tool deployment'
+
+Resources:
+  # Deploy S3 buckets
+  S3BucketsStack:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      TemplateURL: './s3-bucket.yaml'
+      Parameters:
+        LambdaStack: !Ref AWS::StackName
+
+  # Deploy IAM roles
+  IAMRolesStack:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      TemplateURL: './iam-roles.yaml'
+      Parameters:
+        DocumentBucket: !GetAtt S3BucketsStack.Outputs.DocumentBucketName
+        ModelBucket: !GetAtt S3BucketsStack.Outputs.ModelBucketName
+        FeedbackBucket: !GetAtt S3BucketsStack.Outputs.FeedbackBucketName
+
+  # Deploy Lambda functions
+  LambdaFunctionsStack:
+    Type: 'AWS::CloudFormation::Stack'
+    DependsOn:
+      - IAMRolesStack
+      - S3BucketsStack
+    Properties:
+      TemplateURL: './lambda-functions.yaml'
+      Parameters:
+        LambdaExecutionRoleArn: !GetAtt IAMRolesStack.Outputs.LambdaExecutionRoleArn
+        DocumentBucket: !GetAtt S3BucketsStack.Outputs.DocumentBucketName
+        OutputBucket: !GetAtt S3BucketsStack.Outputs.OutputBucketName
+        FeedbackBucket: !GetAtt S3BucketsStack.Outputs.FeedbackBucketName
+        ModelLayer: ''
+
+  # Deploy API Gateway
+  ApiGatewayStack:
+    Type: 'AWS::CloudFormation::Stack'
+    DependsOn:
+      - IAMRolesStack
+      - LambdaFunctionsStack
+    Properties:
+      TemplateURL: './api-gateway.yaml'
+      Parameters:
+        ApiGatewayRoleArn: !GetAtt IAMRolesStack.Outputs.ApiGatewayRoleArn
+        DocumentProcessorFunctionArn: !GetAtt LambdaFunctionsStack.Outputs.DocumentProcessorFunctionArn
+        SummarizationFunctionArn: !GetAtt LambdaFunctionsStack.Outputs.SummarizationFunctionArn
+        FeedbackCollectorFunctionArn: !GetAtt LambdaFunctionsStack.Outputs.FeedbackCollectorFunctionArn
+
+Outputs:
+  ApiEndpoint:
+    Description: "API Endpoint URL for the Text Summarization Tool"
+    Value: !GetAtt ApiGatewayStack.Outputs.ApiEndpoint
+
+  DocumentBucketName:
+    Description: "Name of S3 bucket for document uploads"
+    Value: !GetAtt S3BucketsStack.Outputs.DocumentBucketName
+
+  OutputBucketName:
+    Description: "Name of S3 bucket for summary output"
+    Value: !GetAtt S3BucketsStack.Outputs.OutputBucketName

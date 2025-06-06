@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lambda Functions for Text Summarization Tool'
+
+Parameters:
+  LambdaExecutionRoleArn:
+    Type: String
+    Description: ARN of the Lambda execution role
+
+  DocumentBucket:
+    Type: String
+    Description: Name of the S3 bucket for document storage
+
+  OutputBucket:
+    Type: String
+    Description: Name of the S3 bucket for storing generated summaries
+
+  FeedbackBucket:
+    Type: String
+    Description: Name of the S3 bucket for user feedback storage
+
+  ModelLayer:
+    Type: String
+    Description: ARN of Lambda layer containing ML models
+    Default: ''
+
+Resources:
+  DocumentProcessorFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: text-summarization-document-processor
+      Handler: lambda_function.lambda_handler
+      Role: !Ref LambdaExecutionRoleArn
+      Code:
+        S3Bucket: !Ref DocumentBucket
+        S3Key: lambda/document_processor.zip
+      Runtime: python3.9
+      Timeout: 60
+      MemorySize: 256
+      Environment:
+        Variables:
+          SUMMARIZATION_FUNCTION: !Ref SummarizationFunction
+          OUTPUT_BUCKET: !Ref OutputBucket
+
+  SummarizationFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: text-summarization-summarization
+      Handler: lambda_function.lambda_handler
+      Role: !Ref LambdaExecutionRoleArn
+      Code:
+        S3Bucket: !Ref DocumentBucket
+        S3Key: lambda/summarization.zip
+      Runtime: python3.9
+      Timeout: 300
+      MemorySize: 2048  # ML models need more memory
+      Environment:
+        Variables:
+          OUTPUT_BUCKET: !Ref OutputBucket
+          DEFAULT_MODEL: 'facebook/bart-large-cnn'
+          MAX_LENGTH: '150'
+          MIN_LENGTH: '40'
+      Layers:
+        - !If [HasModelLayer, !Ref ModelLayer, !Ref 'AWS::NoValue']
+
+  FeedbackCollectorFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: text-summarization-feedback-collector
+      Handler: lambda_function.lambda_handler
+      Role: !Ref LambdaExecutionRoleArn
+      Code:
+        S3Bucket: !Ref DocumentBucket
+        S3Key: lambda/feedback_collector.zip
+      Runtime: python3.9
+      Timeout: 60
+      MemorySize: 256
+      Environment:
+        Variables:
+          FEEDBACK_BUCKET: !Ref FeedbackBucket
+          TRIGGER_RETRAINING: 'false'
+
+  # Permission for S3 to invoke Document Processor Lambda
+  DocumentProcessorPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref DocumentProcessorFunction
+      Principal: 's3.amazonaws.com'
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !Sub 'arn:aws:s3:::${DocumentBucket}'
+
+Outputs:
+  DocumentProcessorFunctionArn:
+    Description: ARN of the Document Processor Lambda function
+    Value: !GetAtt DocumentProcessorFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-DocumentProcessorFunctionArn"
+
+  SummarizationFunctionArn:
+    Description: ARN of the Summarization Lambda function
+    Value: !GetAtt SummarizationFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-SummarizationFunctionArn"
+
+  FeedbackCollectorFunctionArn:
+    Description: ARN of the Feedback Collector Lambda function
+    Value: !GetAtt FeedbackCollectorFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-FeedbackCollectorFunctionArn"
+
+Conditions:
+  HasModelLayer: !Not [!Equals [!Ref ModelLayer, '']]

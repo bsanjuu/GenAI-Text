@@ -1,0 +1,116 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'IAM roles for Text Summarization Tool'
+
+Resources:
+  # Lambda execution role with permissions for S3, CloudWatch, and other necessary services
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${DocumentBucket}'
+                  - !Sub 'arn:aws:s3:::${DocumentBucket}/*'
+                  - !Sub 'arn:aws:s3:::${ModelBucket}'
+                  - !Sub 'arn:aws:s3:::${ModelBucket}/*'
+
+  # API Gateway IAM Role to invoke lambda
+  ApiGatewayRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs'
+      Policies:
+        - PolicyName: InvokeLambda
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'lambda:InvokeFunction'
+                Resource: '*'
+
+  # Role for continuous learning and model update functions
+  ModelTrainingRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        - PolicyName: S3ModelAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${FeedbackBucket}'
+                  - !Sub 'arn:aws:s3:::${FeedbackBucket}/*'
+                  - !Sub 'arn:aws:s3:::${ModelBucket}'
+                  - !Sub 'arn:aws:s3:::${ModelBucket}/*'
+
+Outputs:
+  LambdaExecutionRoleArn:
+    Description: ARN of the Lambda execution role
+    Value: !GetAtt LambdaExecutionRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-LambdaExecutionRoleArn"
+
+  ApiGatewayRoleArn:
+    Description: ARN of the API Gateway role
+    Value: !GetAtt ApiGatewayRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiGatewayRoleArn"
+
+  ModelTrainingRoleArn:
+    Description: ARN of the Model Training role
+    Value: !GetAtt ModelTrainingRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-ModelTrainingRoleArn"
+
+Parameters:
+  DocumentBucket:
+    Type: String
+    Description: Name of the S3 bucket for document storage
+
+  ModelBucket:
+    Type: String
+    Description: Name of the S3 bucket for model storage
+
+  FeedbackBucket:
+    Type: String
+    Description: Name of the S3 bucket for user feedback storage

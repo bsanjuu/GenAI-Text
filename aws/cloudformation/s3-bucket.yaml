@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'S3 Buckets for Text Summarization Tool'
+
+Resources:
+  # Bucket for storing user documents
+  DocumentBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub 'text-summarization-documents-${AWS::AccountId}'
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET, PUT, POST, DELETE, HEAD]
+            AllowedOrigins: ['*']
+            MaxAge: 3000
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: 's3:ObjectCreated:*'
+            Function: !ImportValue
+              'Fn::Sub': '${LambdaStack}-DocumentProcessorFunctionArn'
+
+  # Bucket for storing generated summaries
+  OutputBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub 'text-summarization-output-${AWS::AccountId}'
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET]
+            AllowedOrigins: ['*']
+            MaxAge: 3000
+
+  # Bucket for storing user feedback data
+  FeedbackBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub 'text-summarization-feedback-${AWS::AccountId}'
+      LifecycleConfiguration:
+        Rules:
+          - Id: ArchiveOldFeedback
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 90
+                StorageClass: STANDARD_IA
+
+  # Bucket for storing ML models
+  ModelBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub 'text-summarization-models-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+
+Outputs:
+  DocumentBucketName:
+    Description: Name of the document storage bucket
+    Value: !Ref DocumentBucket
+    Export:
+      Name: !Sub "${AWS::StackName}-DocumentBucketName"
+
+  OutputBucketName:
+    Description: Name of the summary output bucket
+    Value: !Ref OutputBucket
+    Export:
+      Name: !Sub "${AWS::StackName}-OutputBucketName"
+
+  FeedbackBucketName:
+    Description: Name of the feedback storage bucket
+    Value: !Ref FeedbackBucket
+    Export:
+      Name: !Sub "${AWS::StackName}-FeedbackBucketName"
+
+  ModelBucketName:
+    Description: Name of the model storage bucket
+    Value: !Ref ModelBucket
+    Export:
+      Name: !Sub "${AWS::StackName}-ModelBucketName"
+
+Parameters:
+  LambdaStack:
+    Type: String
+    Description: Name of the Lambda stack to import values from
+    Default: 'text-summarization-lambda-stack'
