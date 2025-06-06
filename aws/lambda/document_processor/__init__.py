@@ -1,2 +1,0 @@
-# Document Processor Lambda Function
-

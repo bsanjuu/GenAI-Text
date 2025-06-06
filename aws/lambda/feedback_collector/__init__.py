@@ -1,2 +1,0 @@
-# Feedback Collector Lambda Function
-
